@@ -6,7 +6,8 @@ import model.{EbMsMessage, ResponseData}
 import config.Config
 
 import scalaxb.Helper
-import xmlprotocol.{AUFHEBUNG_CCMI, AddressType, CMRevoke, DocumentModeType, ECNumber, MarketParticipantDirectoryType6, Number01Value4, Number01u4600Value4, PRODValue, ProcessDirectoryType6, RoutingAddress, RoutingHeader, SIMUValue, SchemaVersionType6}
+import xmlprotocol.{AddressType, DocumentMode, ECNumber, Number01, PROD, RoutingAddress, RoutingHeader, SIMU}
+import xmlprotocol.cmrevoke.{v01p00 => v00}
 
 import java.util.{Calendar, Date}
 import scala.util.Try
@@ -16,7 +17,7 @@ case class CMRevokeMessage(message: EbMsMessage) extends EdaMessage {
   override def getVersion(version: Option[String]): EdaXMLMessage[_] = CMRevokeXMLMessageV0100(message)
 }
 
-case class CMRevokeXMLMessageV0100(message: EbMsMessage) extends EdaXMLMessage[CMRevoke] {
+case class CMRevokeXMLMessageV0100(message: EbMsMessage) extends EdaXMLMessage[v00.CMRevoke] {
   override def rootNodeLabel: Some[String] = Some("CMRevoke")
 
   override def schemaLocation: Option[String] =
@@ -32,25 +33,25 @@ case class CMRevokeXMLMessageV0100(message: EbMsMessage) extends EdaXMLMessage[C
     calendar.setTime(new Date)
     calendar.set(Calendar.MILLISECOND, 0)
 
-    val doc = CMRevoke(
-      MarketParticipantDirectoryType6(
+    val doc = v00.CMRevoke(
+      v00.MarketParticipantDirectory(
         RoutingHeader(
           RoutingAddress(message.sender, Map(("@AddressType", scalaxb.DataRecord[AddressType](ECNumber)))),
           RoutingAddress(message.receiver, Map(("@AddressType", scalaxb.DataRecord[AddressType](ECNumber)))),
           Helper.toCalendar(calendar)
         ),
-        Number01Value4,
-        AUFHEBUNG_CCMI,
+        Number01,
+        v00.AUFHEBUNG_CCMI,
         Map(
-          ("@DocumentMode", scalaxb.DataRecord[DocumentModeType](Config.interfaceMode match {
-            case "SIMU" => SIMUValue
-            case _ => PRODValue
+          ("@DocumentMode", scalaxb.DataRecord[DocumentMode](Config.interfaceMode match {
+            case "SIMU" => SIMU
+            case _ => PROD
           })),
           ("@Duplicate", scalaxb.DataRecord(false)),
-          ("@SchemaVersion", scalaxb.DataRecord[SchemaVersionType6](Number01u4600Value4)),
+          ("@SchemaVersion", scalaxb.DataRecord[v00.SchemaVersion](v00.Number01u4600)),
         )
       ),
-      ProcessDirectoryType6(
+      v00.ProcessDirectory(
         message.messageId.get,
         message.conversationId,
         message.requestId.get,
@@ -60,7 +61,7 @@ case class CMRevokeXMLMessageV0100(message: EbMsMessage) extends EdaXMLMessage[C
       )
     )
 
-    scalaxb.toXML[CMRevoke](doc, Some("http://www.ebutilities.at/schemata/customerconsent/cmrevoke/01p00"), rootNodeLabel,
+    scalaxb.toXML[v00.CMRevoke](doc, Some("http://www.ebutilities.at/schemata/customerconsent/cmrevoke/01p00"), rootNodeLabel,
       scalaxb.toScope(
         Some("rv") -> "http://www.ebutilities.at/schemata/customerconsent/cmrevoke/01p00",
         Some("ct") -> "http://www.ebutilities.at/schemata/customerprocesses/common/types/01p20",
@@ -72,7 +73,7 @@ case class CMRevokeXMLMessageV0100(message: EbMsMessage) extends EdaXMLMessage[C
 
 object CMRevokeXMLMessageV0100 extends EdaResponseType {
   override def fromXML(xmlFile: Elem): Try[CMRevokeMessage] = {
-    Try(scalaxb.fromXML[CMRevoke](xmlFile)).map(document => {
+    Try(scalaxb.fromXML[v00.CMRevoke](xmlFile)).map(document => {
       CMRevokeMessage(
         EbMsMessage(
           messageId = Some(document.ProcessDirectory.MessageId),

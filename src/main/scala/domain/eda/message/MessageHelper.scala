@@ -55,8 +55,12 @@ object MessageHelper {
       case PROCESS_REGISTER_OFFLINE => Some(CMRequestOfflineRegistrationXMLMessage)
       case PROCESS_LIST_METERINGPOINTS => Some(CPRequestZPListXMLMessage)
       case PROCESS_METERINGPOINTS_VALUE => Some(CPRequestMeteringValueXMLMessage)
-      case PROCESS_REVOKE_VALUE | PROCESS_REVOKE_CUS => Some(CMRevokeXMLMessageV0100)
-      case PROCESS_REVOKE_SP => Some(CMRevokeRequestV0100)
+      case PROCESS_REVOKE_VALUE | PROCESS_REVOKE_CUS => Some(CMRevokeXMLMessageV0110)
+      case PROCESS_REVOKE_SP =>
+        version match {
+          case "01.30" | "01.20" => Some(CMRevokeRequestV0110)
+          case _ => Some(CMRevokeRequestV0100)
+        }
       case PROCESS_EC_PRTFACT_CHANGE => {
         version match {
           case "01.00" => Some(ECPartitionChangeXMLMessage)

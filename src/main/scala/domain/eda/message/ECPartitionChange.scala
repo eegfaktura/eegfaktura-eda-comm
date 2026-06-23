@@ -6,7 +6,9 @@ import model.enums.{EbMsMessageType, EcDisModelEnum, EcTypeEnum, MeterDirectionT
 import model.{EbMsMessage, ResponseData}
 
 import scalaxb.Helper
-import xmlprotocol.{AddressType, CCValue, CONSUMPTIONValue3, CPNotification, DocumentModeType, ECMPList, ECMPList2, ECNumber, GCValue, GENERATIONValue3, MPListDataType, MPTimeDataType, MarketParticipantDirectoryType14, Number01Value4, Number01u4610Value, PRODValue, ProcessDirectoryType14, RC_LValue, RC_RValue, RoutingAddress, RoutingHeader, SIMUValue, SchemaVersionType11}
+import xmlprotocol.{AddressType, DocumentMode, ECNumber, Number01, PROD, RoutingAddress, RoutingHeader, SIMU}
+import xmlprotocol.ecmplist.{v01p10 => ecmp10}
+import xmlprotocol.cpnotification.{v01p13 => cpn13}
 
 import java.util.{Calendar, Date}
 import scala.util.Try
@@ -17,7 +19,7 @@ case class ECPartitionChangeMessage(message: EbMsMessage) extends EdaMessage {
   override def getVersion(version: Option[String] = None): EdaXMLMessage[_] = ECPartitionChangeXMLMessage(message)
 }
 
-case class ECPartitionChangeXMLMessage(message: EbMsMessage) extends EdaXMLMessage[ECMPList] {
+case class ECPartitionChangeXMLMessage(message: EbMsMessage) extends EdaXMLMessage[ecmp10.ECMPList] {
 
   override def rootNodeLabel: Some[String] = Some("ECMPList")
 
@@ -28,56 +30,51 @@ case class ECPartitionChangeXMLMessage(message: EbMsMessage) extends EdaXMLMessa
   override def toXML: Node = {
     import scalaxb.XMLStandardTypes._
 
-    import java.util.GregorianCalendar
-
     val now = new Date
     val processDate = Calendar.getInstance
     processDate.add(Calendar.DATE, 1)
-//    val calendar: GregorianCalendar = new GregorianCalendar
-//    calendar.setTime(new Date)
-//    calendar.set(Calendar.MILLISECOND, 0)
 
-    val doc = ECMPList2(
-      MarketParticipantDirectory=MarketParticipantDirectoryType14(
+    val doc = ecmp10.ECMPList(
+      MarketParticipantDirectory=ecmp10.MarketParticipantDirectory(
         RoutingHeader=RoutingHeader(
           RoutingAddress(message.sender, Map(("@AddressType", scalaxb.DataRecord[AddressType](ECNumber)))),
           RoutingAddress(message.receiver, Map(("@AddressType", scalaxb.DataRecord[AddressType](ECNumber)))),
           Helper.toCalendar(MessageHelper.buildCalendar(now))
         ),
-        Sector=Number01Value4,
+        Sector=Number01,
         MessageCode="ANFORDERUNG_CPF",
         attributes=Map(
-          ("@DocumentMode", scalaxb.DataRecord[DocumentModeType](Config.interfaceMode match {
-            case "SIMU" => SIMUValue
-            case _ => PRODValue
+          ("@DocumentMode", scalaxb.DataRecord[DocumentMode](Config.interfaceMode match {
+            case "SIMU" => SIMU
+            case _ => PROD
           })),
           ("@Duplicate", scalaxb.DataRecord(false)),
-          ("@SchemaVersion", scalaxb.DataRecord[SchemaVersionType11](Number01u4610Value)),
+          ("@SchemaVersion", scalaxb.DataRecord[ecmp10.SchemaVersion](ecmp10.Number01u4610)),
         )
       ),
-      ProcessDirectory=ProcessDirectoryType14(
+      ProcessDirectory=ecmp10.ProcessDirectory(
         MessageId = message.messageId.get,
         ConversationId = message.conversationId,
         ProcessDate = Helper.toCalendar(MessageHelper.buildCalendarDate(processDate.getTime)),
         ECID = message.ecId.get,
         ECType = message.ecType match {
-          case Some(EcTypeEnum.GEA) => GCValue
-          case Some(EcTypeEnum.REGIONAL) => RC_RValue
-          case Some(EcTypeEnum.BEG) => CCValue
-          case _ => RC_LValue
+          case Some(EcTypeEnum.GEA) => ecmp10.GC
+          case Some(EcTypeEnum.REGIONAL) => ecmp10.RC_R
+          case Some(EcTypeEnum.BEG) => ecmp10.CC
+          case _ => ecmp10.RC_L
         },
         ECDisModel = message.ecDisModel match {
-          case Some(EcDisModelEnum.STATIC) => xmlprotocol.SValue
-          case _ => xmlprotocol.DValue11
+          case Some(EcDisModelEnum.STATIC) => ecmp10.S
+          case _ => ecmp10.D
         },
         MPListData = message.meterList.get.map(m =>
-          MPListDataType(MeteringPoint = m.meteringPoint,
-            MPTimeData = Seq(MPTimeDataType(
+          ecmp10.MPListData(MeteringPoint = m.meteringPoint,
+            MPTimeData = Seq(ecmp10.MPTimeData(
               DateFrom = Helper.toCalendar(MessageHelper.buildCalendarDate(now)),
               DateTo = Helper.toCalendar("2099-12-31"),
               EnergyDirection = m.direction match {
-                case Some(MeterDirectionType.CONSUMPTION) => CONSUMPTIONValue3
-                case _ => GENERATIONValue3
+                case Some(MeterDirectionType.CONSUMPTION) => ecmp10.CONSUMPTION
+                case _ => ecmp10.GENERATION
               },
               ECPartFact = m.partFact.get,
               DateActivate = Helper.toCalendar(MessageHelper.buildCalendarDate(m.activation.get)),
@@ -85,7 +82,7 @@ case class ECPartitionChangeXMLMessage(message: EbMsMessage) extends EdaXMLMessa
       )
     )
 
-    scalaxb.toXML[ECMPList2](doc, Some("http://www.ebutilities.at/schemata/customerprocesses/ecmplist/01p10"), rootNodeLabel,
+    scalaxb.toXML[ecmp10.ECMPList](doc, Some("http://www.ebutilities.at/schemata/customerprocesses/ecmplist/01p10"), rootNodeLabel,
       scalaxb.toScope(
         Some("rv") -> "http://www.ebutilities.at/schemata/customerprocesses/ecmplist/01p10",
         Some("ct") -> "http://www.ebutilities.at/schemata/customerprocesses/common/types/01p20",
@@ -97,7 +94,7 @@ case class ECPartitionChangeXMLMessage(message: EbMsMessage) extends EdaXMLMessa
 
 object ECPartitionChangeXMLMessage extends EdaResponseType {
   override def fromXML(xmlFile: Elem): Try[ECPartitionChangeMessage] =
-    Try(scalaxb.fromXML[CPNotification](xmlFile)).map(document =>
+    Try(scalaxb.fromXML[cpn13.CPNotification](xmlFile)).map(document =>
       ECPartitionChangeMessage(
         EbMsMessage(
           messageId = Some(document.ProcessDirectory.MessageId),

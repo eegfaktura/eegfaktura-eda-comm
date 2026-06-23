@@ -2,19 +2,22 @@ package at.energydash
 package domain.eda.message
 
 import model.enums.{EbMsMessageType, MeterDirectionType}
-import model.{EbMsMessage, Meter, ResponseData}
+import model.{EbMsMessage, Meter}
 
 import scalaxb.Helper
-import xmlprotocol.{AddressType, CMNotification, CMRequest, CMRequest2, CONSUMPTIONValue, DocumentModeType, ECMPList, ECNumber, GENERATIONValue, MarketParticipantDirectoryType7, Number01Value4, Number01u4610, PRODValue, ProcessDirectoryType7, ReqType, RoutingAddress, RoutingHeader, SchemaVersionType7}
+import xmlprotocol.{AddressType, DocumentMode, ECNumber, Number01, PROD, RoutingAddress, RoutingHeader}
+import xmlprotocol.cmrequest.{v01p10 => v10}
+import xmlprotocol.ecmplist.{v01p00 => ecmp00}
 
-import java.util.{Calendar, Date}
+import java.util.{Calendar, Date, GregorianCalendar}
 import scala.util.{Failure, Success, Try}
 import scala.xml.{Elem, Node}
+
 case class CMRequestOfflineRegistration(message: EbMsMessage) extends EdaMessage {
   override def getVersion(version: Option[String] = None): EdaXMLMessage[_] = CMRequestOfflineRegistrationXMLMessage(message)
 }
 
-case class CMRequestOfflineRegistrationXMLMessage(message: EbMsMessage) extends EdaXMLMessage[CMRequest2] {
+case class CMRequestOfflineRegistrationXMLMessage(message: EbMsMessage) extends EdaXMLMessage[v10.CMRequest] {
   override def rootNodeLabel: Option[String] = Some("CMRequest")
 
   override def schemaLocation: Option[String] =
@@ -23,8 +26,6 @@ case class CMRequestOfflineRegistrationXMLMessage(message: EbMsMessage) extends 
   override def toXML: Node = {
     import scalaxb.XMLStandardTypes._
 
-    import java.util.GregorianCalendar
-
     val calendar: GregorianCalendar = new GregorianCalendar
     calendar.setTime(new Date)
     calendar.set(Calendar.MILLISECOND, 0)
@@ -32,49 +33,49 @@ case class CMRequestOfflineRegistrationXMLMessage(message: EbMsMessage) extends 
     val processCalendar = new GregorianCalendar(calendar.get(Calendar.YEAR), calendar.get(Calendar.MONTH), calendar.get(Calendar.DAY_OF_MONTH))
     processCalendar.add(Calendar.DAY_OF_MONTH, 3)
 
-    val doc = CMRequest(
-      MarketParticipantDirectoryType7(
+    val doc = v10.CMRequest(
+      v10.MarketParticipantDirectory(
         RoutingHeader(
           RoutingAddress(message.sender, Map(("@AddressType", scalaxb.DataRecord[AddressType](ECNumber)))),
           RoutingAddress(message.receiver, Map(("@AddressType", scalaxb.DataRecord[AddressType](ECNumber)))),
           Helper.toCalendar(calendar)
         ),
-        Number01Value4,
+        Number01,
         message.messageCode.toString,
         Map(
-          ("@DocumentMode", scalaxb.DataRecord[DocumentModeType](PRODValue)),
+          ("@DocumentMode", scalaxb.DataRecord[DocumentMode](PROD)),
           ("@Duplicate", scalaxb.DataRecord(false)),
-          ("@SchemaVersion", scalaxb.DataRecord[SchemaVersionType7](Number01u4610)),
+          ("@SchemaVersion", scalaxb.DataRecord[v10.SchemaVersion](v10.Number01u4610)),
         )
 
       ),
-      ProcessDirectoryType7(
+      v10.ProcessDirectory(
         MessageId=message.messageId.get,
         ConversationId=message.conversationId,
         ProcessDate=Helper.toCalendar(dateFmt.format(calendar.getTime)),
         MeteringPoint=message.meter.map(x => x.meteringPoint),
         CMRequestId=message.requestId.get,
         ConsentId=message.meter.map(m=>m.consentId.getOrElse("")),
-        CMRequest=ReqType(
+        CMRequest=v10.ReqType(
           ReqDatType = "EnergyCommunityRegistration",
           DateFrom = Helper.toCalendar(dateFmt.format(processCalendar.getTime)),
           DateTo = Some(Helper.toCalendar(dateFmt.format(new GregorianCalendar(2099, 12, 31).getTime))),
-          MeteringIntervall = None, //Some(QHValue),
-          TransmissionCycle = None, //Some(DValue2),
+          MeteringIntervall = None,
+          TransmissionCycle = None,
           ECID = message.ecId,
-          ECShare = None, //Some(BigDecimal(0.0)),
+          ECShare = None,
           EnergyDirection = message.meter.map { m =>
             m.direction match {
-              case Some(MeterDirectionType.CONSUMPTION) => CONSUMPTIONValue
-              case Some(MeterDirectionType.GENERATION) => GENERATIONValue
-              case _ => CONSUMPTIONValue
+              case Some(MeterDirectionType.CONSUMPTION) => v10.CONSUMPTION
+              case Some(MeterDirectionType.GENERATION) => v10.GENERATION
+              case _ => v10.CONSUMPTION
             }
           }
         )
       )
     )
 
-    scalaxb.toXML[CMRequest](doc, Some("http://www.ebutilities.at/schemata/customerconsent/cmrequest/01p10"), rootNodeLabel,
+    scalaxb.toXML[v10.CMRequest](doc, Some("http://www.ebutilities.at/schemata/customerconsent/cmrequest/01p10"), rootNodeLabel,
       scalaxb.toScope(
         None -> "http://www.ebutilities.at/schemata/customerprocesses/common/types/01p20",
         Some("ns2") -> "http://www.ebutilities.at/schemata/customerconsent/cmrequest/01p10",
@@ -87,7 +88,7 @@ object CMRequestOfflineRegistrationXMLMessage extends EdaResponseType {
   def fromXML(xmlFile: Elem): Try[CMRequestOfflineRegistration] = {
     resolveMessageCode(xmlFile) match {
       case Success(mc) => mc match {
-        case EbMsMessageType.OFFLINE_REG_COMPLETION => Try(scalaxb.fromXML[ECMPList](xmlFile)).map(document =>
+        case EbMsMessageType.OFFLINE_REG_COMPLETION => Try(scalaxb.fromXML[ecmp00.ECMPList](xmlFile)).map(document =>
           CMRequestOfflineRegistration(
             EbMsMessage(
               messageId = Some(document.ProcessDirectory.MessageId),
@@ -107,17 +108,17 @@ object CMRequestOfflineRegistrationXMLMessage extends EdaResponseType {
             )
           )
         )
-        case _ => Try(scalaxb.fromXML[CMNotification](xmlFile)).map(document =>
+        case _ => CMNotificationParser.parse(xmlFile).map(p =>
           CMRequestOfflineRegistration(
             EbMsMessage(
-              messageId=Some(document.ProcessDirectory.MessageId),
-              conversationId=document.ProcessDirectory.ConversationId,
-              sender=document.MarketParticipantDirectory.RoutingHeader.Sender.MessageAddress,
-              receiver=document.MarketParticipantDirectory.RoutingHeader.Receiver.MessageAddress,
-              messageCode=EbMsMessageType.withName(document.MarketParticipantDirectory.MessageCode),
+              messageId=Some(p.messageId),
+              conversationId=p.conversationId,
+              sender=p.sender,
+              receiver=p.receiver,
+              messageCode=EbMsMessageType.withName(p.messageCode),
               messageCodeVersion=Some("01.11"),
-              requestId=Some(document.ProcessDirectory.CMRequestId),
-              responseData=Some(document.ProcessDirectory.ResponseData.map(r => ResponseData(r.MeteringPoint, r.ResponseCode))),
+              requestId=Some(p.cmRequestId),
+              responseData=Some(p.responseData),
             )
           )
         )

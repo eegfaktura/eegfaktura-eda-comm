@@ -6,18 +6,21 @@ import model.enums.{EbMsMessageType, MeterDirectionType}
 import model.{EbMsMessage, Meter, ResponseData}
 
 import scalaxb.Helper
-import xmlprotocol.{AddressType, CPNotification, CPRequest, DocumentModeType, ECMPList2, ECNumber, MarketParticipantDirectoryType4, Number01Value4, Number01u4612, PRODValue, ProcessDirectoryType4, RoutingAddress, RoutingHeader, SIMUValue, SchemaVersionType4}
+import xmlprotocol.{AddressType, DocumentMode, ECNumber, Number01, PROD, RoutingAddress, RoutingHeader, SIMU}
+import xmlprotocol.cprequest.{v01p12 => cp12}
+import xmlprotocol.cpnotification.{v01p13 => cpn13}
+import xmlprotocol.ecmplist.{v01p10 => ecmp10}
 
 import java.text.SimpleDateFormat
 import java.util.{Calendar, Date, TimeZone}
 import scala.util.{Failure, Success, Try}
-import scala.xml.{Elem, NamespaceBinding, Node, TopScope}
+import scala.xml.{Elem, Node}
 
 case class CPRequestZPList(message: EbMsMessage) extends EdaMessage {
   override def getVersion(version: Option[String] = None): EdaXMLMessage[_] = CPRequestZPListXMLMessage(message)
 }
 
-case class CPRequestZPListXMLMessage(message: EbMsMessage) extends EdaXMLMessage[CPRequest] {
+case class CPRequestZPListXMLMessage(message: EbMsMessage) extends EdaXMLMessage[cp12.CPRequest] {
 
   override def rootNodeLabel: Some[String] = Some("CPRequest")
 
@@ -35,29 +38,28 @@ case class CPRequestZPListXMLMessage(message: EbMsMessage) extends EdaXMLMessage
     calendar.set(Calendar.MILLISECOND, 0)
 
     val processCalendar = new GregorianCalendar(calendar.get(Calendar.YEAR), calendar.get(Calendar.MONTH), calendar.get(Calendar.DAY_OF_MONTH))
-    //    processCalendar.add(Calendar.DAY_OF_MONTH, 3)
 
     val dateFmt = new SimpleDateFormat("yyyy-MM-dd")
 
-    val doc = CPRequest(
-      MarketParticipantDirectoryType4(
+    val doc = cp12.CPRequest(
+      cp12.MarketParticipantDirectory(
         RoutingHeader(
           RoutingAddress(message.sender, Map(("@AddressType", scalaxb.DataRecord[AddressType](ECNumber)))),
           RoutingAddress(message.receiver, Map(("@AddressType", scalaxb.DataRecord[AddressType](ECNumber)))),
           Helper.toCalendar(calendar)
         ),
-        Number01Value4,
+        Number01,
         message.messageCode.toString,
         Map(
-          ("@DocumentMode", scalaxb.DataRecord[DocumentModeType](Config.interfaceMode match {
-            case "SIMU" => SIMUValue
-            case _ => PRODValue
+          ("@DocumentMode", scalaxb.DataRecord[DocumentMode](Config.interfaceMode match {
+            case "SIMU" => SIMU
+            case _ => PROD
           })),
           ("@Duplicate", scalaxb.DataRecord(false)),
-          ("@SchemaVersion", scalaxb.DataRecord[SchemaVersionType4](Number01u4612)),
+          ("@SchemaVersion", scalaxb.DataRecord[cp12.SchemaVersion](cp12.Number01u4612)),
         )
       ),
-      ProcessDirectoryType4(
+      cp12.ProcessDirectory(
         message.messageId.get,
         message.conversationId,
         Helper.toCalendar(dateFmt.format(processCalendar.getTime)),
@@ -75,7 +77,7 @@ case class CPRequestZPListXMLMessage(message: EbMsMessage) extends EdaXMLMessage
           to.clear(Calendar.SECOND);
           to.clear(Calendar.MINUTE);
           to.clear(Calendar.HOUR)
-          xmlprotocol.Extension(
+          cp12.Extension(
             None,
             None,
             None,
@@ -91,28 +93,13 @@ case class CPRequestZPListXMLMessage(message: EbMsMessage) extends EdaXMLMessage
       )
     )
 
-    //    scalaxb.toXML[CPRequest](doc, Some("http://www.ebutilities.at/schemata/customerprocesses/cprequest/01p12"), Some("CPRequest"),
-    //          scalaxb.toScope(
-    //            Some("cp") -> "http://www.ebutilities.at/schemata/customerprocesses/cprequest/01p12",
-    //            Some("ct") -> "http://www.ebutilities.at/schemata/customerprocesses/common/types/01p20",
-    //          ),
-    //    //      TopScope,
-    //          false).head
-
-    scalaxb.toXML[CPRequest](doc, Some("http://www.ebutilities.at/schemata/customerprocesses/cprequest/01p12"), rootNodeLabel,
+    scalaxb.toXML[cp12.CPRequest](doc, Some("http://www.ebutilities.at/schemata/customerprocesses/cprequest/01p12"), rootNodeLabel,
       scalaxb.toScope(
         Some("cp") -> "http://www.ebutilities.at/schemata/customerprocesses/cprequest/01p12",
         Some("ct") -> "http://www.ebutilities.at/schemata/customerprocesses/common/types/01p20",
         Some("xsi") -> "http://www.w3.org/2001/XMLSchema-instance",
       ),
       true).head
-  }
-
-  private def defineNamespaceBinding(): NamespaceBinding = {
-    val nsb2 = NamespaceBinding("schemaLocation", "http://www.ebutilities.at/schemata/customerprocesses/cprequest/01p12/CPRequest_01p12.xsd", TopScope)
-    val nsb3 = NamespaceBinding("xsi", "http://www.w3.org/2001/XMLSchema-instance", nsb2)
-    val nsb4 = NamespaceBinding("cp", "http://www.ebutilities.at/schemata/customerprocesses/cprequest/01p12", TopScope)
-    NamespaceBinding(null, "http://www.ebutilities.at/schemata/customerprocesses/common/types/01p20", nsb2)
   }
 }
 
@@ -121,7 +108,7 @@ object CPRequestZPListXMLMessage extends EdaResponseType {
     resolveMessageCode(xmlFile) match {
       case Success(mc) => mc match {
         case EbMsMessageType.ZP_LIST_RESPONSE =>
-          Try(scalaxb.fromXML[ECMPList2](xmlFile)).map(document =>
+          Try(scalaxb.fromXML[ecmp10.ECMPList](xmlFile)).map(document =>
             CPRequestZPList(
               EbMsMessage(
                 messageId = Some(document.ProcessDirectory.MessageId),
@@ -148,7 +135,7 @@ object CPRequestZPListXMLMessage extends EdaResponseType {
               )
             )
           )
-        case _ => Try(scalaxb.fromXML[CPNotification](xmlFile)).map(document =>
+        case _ => Try(scalaxb.fromXML[cpn13.CPNotification](xmlFile)).map(document =>
           CPRequestZPList(
             EbMsMessage(
               messageId=Some(document.ProcessDirectory.MessageId),

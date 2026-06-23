@@ -96,13 +96,64 @@ lazy val root = (project in file("."))
 //    Compile / akkaGrpcCodeGeneratorSettings / target := crossTarget.value / "src_managed" / "main" / "akka-grpc",
 
     Compile / scalaxb / scalaxbPackageName := "xmlprotocol",
+    Compile / scalaxb / scalaxbProtocolPackageName := Some("xmlprotocol"),
+
+    // Vollständiges Per-Namespace-Mapping: jede versionierte XSD landet in
+    // ihrem eigenen Sub-Package. Im Single-Package kollidieren gleichnamige
+    // Typen aus verschiedenen Schema-Versionen (CMRevoke, MarketParticipant-
+    // Directory, …) und scalaxb vergibt instabile Auto-Suffixe (…Type6,
+    // …Value4). Mit der Isolation erhält jedes Sub-Package saubere Namen und
+    // eine neue Schema-Version (hier cmrevoke/01p10) lässt sich kollisionsfrei
+    // ergänzen. CPCommonTypes_01p20 bleibt im Default-Package "xmlprotocol",
+    // weil es die von allen XSDs gemeinsam genutzten Basis-Typen (RoutingHeader,
+    // AddressType, Sector, …) bereitstellt.
+    Compile / scalaxb / scalaxbPackageNames := Map(
+      new java.net.URI("http://www.ebutilities.at/schemata/customerconsent/cmrequest/01p10")
+        -> "xmlprotocol.cmrequest.v01p10",
+      new java.net.URI("http://www.ebutilities.at/schemata/customerconsent/cmrequest/01p20")
+        -> "xmlprotocol.cmrequest.v01p20",
+      new java.net.URI("http://www.ebutilities.at/schemata/customerconsent/cmrevoke/01p00")
+        -> "xmlprotocol.cmrevoke.v01p00",
+      new java.net.URI("http://www.ebutilities.at/schemata/customerconsent/cmrevoke/01p10")
+        -> "xmlprotocol.cmrevoke.v01p10",
+      new java.net.URI("http://www.ebutilities.at/schemata/customerconsent/cmnotification/01p11")
+        -> "xmlprotocol.cmnotification.v01p11",
+      new java.net.URI("http://www.ebutilities.at/schemata/customerprocesses/cprequest/01p12")
+        -> "xmlprotocol.cprequest.v01p12",
+      new java.net.URI("http://www.ebutilities.at/schemata/customerprocesses/cpnotification/01p13")
+        -> "xmlprotocol.cpnotification.v01p13",
+      new java.net.URI("http://www.ebutilities.at/schemata/customerprocesses/cpdocument/01p12")
+        -> "xmlprotocol.cpdocument.v01p12",
+      new java.net.URI("http://www.ebutilities.at/schemata/customerprocesses/consumptionrecord/01p30")
+        -> "xmlprotocol.consumptionrecord.v01p30",
+      new java.net.URI("http://www.ebutilities.at/schemata/customerprocesses/consumptionrecord/01p31")
+        -> "xmlprotocol.consumptionrecord.v01p31",
+      new java.net.URI("http://www.ebutilities.at/schemata/customerprocesses/consumptionrecord/01p40")
+        -> "xmlprotocol.consumptionrecord.v01p40",
+      new java.net.URI("http://www.ebutilities.at/schemata/customerprocesses/ecmplist/01p00")
+        -> "xmlprotocol.ecmplist.v01p00",
+      new java.net.URI("http://www.ebutilities.at/schemata/customerprocesses/ecmplist/01p10")
+        -> "xmlprotocol.ecmplist.v01p10",
+      new java.net.URI("http://www.ebutilities.at/schemata/customerprocesses/gc/gcrequest/01p00")
+        -> "xmlprotocol.gc.gcrequest.v01p00",
+      new java.net.URI("http://www.ebutilities.at/schemata/customerprocesses/gc/gcrequestap/01p00")
+        -> "xmlprotocol.gc.gcrequestap.v01p00",
+      new java.net.URI("http://www.ebutilities.at/schemata/customerprocesses/gc/gcresponseap/01p00")
+        -> "xmlprotocol.gc.gcresponseap.v01p00"
+    ),
 
     Compile / managedSourceDirectories ++= Seq(
       target.value / "scala-2.13" / "akka-grpc" / "main",
       target.value / "scala-2.13" / "src_managed" / "main"
     ),
 
-    Test / javaOptions ++= Seq(s"-Dconfig.file=${sourceDirectory.value}/test/resources/application-test.conf"),
+    Test / javaOptions ++= Seq(
+      s"-Dconfig.file=${sourceDirectory.value}/test/resources/application-test.conf",
+      // Date-Felder (z.B. CMRevoke ConsentEnd) werden via SimpleDateFormat in
+      // der Default-TZ gerendert; Tests asserten Wiener Datums-Strings. Ohne
+      // feste TZ rendert ein UTC-CI einen Tag früher.
+      "-Duser.timezone=Europe/Vienna"
+    ),
 
 //    Test / resourceDirectory := baseDirectory.value / "test-resources",
 
